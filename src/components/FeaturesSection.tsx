@@ -1,6 +1,6 @@
-import React, { useState, useRef } from 'react'
-import { motion, AnimatePresence, useInView } from 'motion/react'
-import { Monitor, Clock, Wrench, Bell, BarChart2, FileText, TrendingUp, X, ChevronRight, AlertTriangle } from 'lucide-react'
+import React, { useState } from 'react'
+import { motion, AnimatePresence } from 'motion/react'
+import { Monitor, Clock, Wrench, Bell, BarChart2, FileText, X, ChevronRight, CheckCircle2, AlertCircle, CalendarClock, History, ChevronDown, Tag, Cpu, MapPin } from 'lucide-react'
 
 // Datos ilustrativos
 const equiposList = [
@@ -24,7 +24,32 @@ const reportes = [
   { name: 'Resumen de Fallas Q3 2026', pages: 6 },
   { name: 'Plan de Mantenimiento Nov 2026', pages: 3 },
 ]
-const trendData = [30, 35, 28, 45, 50, 42, 60, 55, 70, 65, 80, 72]
+// ── Datos para el dashboard de seguimiento de mantenimiento ──────────────────
+type MtStatus = 'completado' | 'pendiente' | 'proximo'
+interface Mantenimiento {
+  id: string
+  equipo: string
+  tipo: string
+  fecha: string
+  tecnico: string
+  status: MtStatus
+  nota: string
+}
+const equiposDashboard = [
+  { id: 'PC-001', nombre: 'Contabilidad A', ubicacion: 'Of. 201', tipo: 'Workstation', status: 'operativo' as const },
+  { id: 'PC-002', nombre: 'Servidor Principal', ubicacion: 'Sala TI', tipo: 'Servidor', status: 'mantenimiento' as const },
+  { id: 'PC-003', nombre: 'Recepción', ubicacion: 'Lobby', tipo: 'All-in-One', status: 'alerta' as const },
+  { id: 'PC-004', nombre: 'Gerencia', ubicacion: 'Of. 301', tipo: 'Laptop', status: 'operativo' as const },
+  { id: 'PC-005', nombre: 'Diseño', ubicacion: 'Of. 105', tipo: 'Workstation', status: 'proximo' as const },
+]
+const mantenimientosData: Mantenimiento[] = [
+  { id: 'MT-001', equipo: 'PC-002', tipo: 'Preventivo', fecha: '28 Oct 2026', tecnico: 'Andrés M.', status: 'pendiente', nota: 'Limpieza interna y revisión de ventiladores' },
+  { id: 'MT-002', equipo: 'PC-003', tipo: 'Correctivo', fecha: '27 Oct 2026', tecnico: 'Laura G.', status: 'pendiente', nota: 'Falla en pantalla, reemplazo de cable' },
+  { id: 'MT-003', equipo: 'PC-005', tipo: 'Preventivo', fecha: '02 Nov 2026', tecnico: 'Andrés M.', status: 'proximo', nota: 'Revisión programada trimestral' },
+  { id: 'MT-004', equipo: 'PC-001', tipo: 'Preventivo', fecha: '15 Oct 2026', tecnico: 'Laura G.', status: 'completado', nota: 'Actualización de drivers y limpieza' },
+  { id: 'MT-005', equipo: 'PC-004', tipo: 'Preventivo', fecha: '10 Oct 2026', tecnico: 'Carlos V.', status: 'completado', nota: 'Revisión de batería y puertos' },
+  { id: 'MT-006', equipo: 'PC-001', tipo: 'Correctivo', fecha: '01 Oct 2026', tecnico: 'Andrés M.', status: 'completado', nota: 'Reemplazo de teclado defectuoso' },
+]
 
 interface Feature {
   icon: React.ReactNode
@@ -218,45 +243,326 @@ const ReportsMini: React.FC = () => {
   )
 }
 
-const PredictiveMini: React.FC = () => {
-  const max = Math.max(...trendData)
-  const w = 200; const h = 80
-  const pts = trendData.map((v, i) => `${(i / (trendData.length - 1)) * w},${h - (v / max) * (h - 10) - 5}`)
-  const polyline = pts.join(' ')
+
+
+
+// ── Status config helpers ─────────────────────────────────────────────────────
+const equipoStatusCfg = {
+  operativo: { label: 'Operativo', dot: 'bg-emerald-400', text: 'text-emerald-400', bg: 'bg-emerald-400/10 border-emerald-400/20' },
+  mantenimiento: { label: 'Mantenimiento', dot: 'bg-yellow-electric', text: 'text-yellow-electric', bg: 'bg-yellow-electric/10 border-yellow-electric/30' },
+  alerta: { label: 'Alerta', dot: 'bg-red-400', text: 'text-red-400', bg: 'bg-red-400/10 border-red-400/20' },
+  proximo: { label: 'Próximo mant.', dot: 'bg-blue-400', text: 'text-blue-400', bg: 'bg-blue-400/10 border-blue-400/20' },
+}
+const mtStatusCfg: Record<MtStatus, { label: string; icon: React.ReactNode; badge: string }> = {
+  completado: { label: 'Completado', icon: <CheckCircle2 size={13} className="text-emerald-400" />, badge: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20' },
+  pendiente:  { label: 'Pendiente',  icon: <AlertCircle  size={13} className="text-red-400" />,     badge: 'text-red-400 bg-red-400/10 border-red-400/20' },
+  proximo:    { label: 'Próximo',    icon: <CalendarClock size={13} className="text-blue-400" />,   badge: 'text-blue-400 bg-blue-400/10 border-blue-400/20' },
+}
+
+type FilterTab = 'todos' | MtStatus
+const filterTabs: { key: FilterTab; label: string }[] = [
+  { key: 'todos', label: 'Todos' },
+  { key: 'pendiente', label: 'Pendientes' },
+  { key: 'proximo', label: 'Próximos' },
+  { key: 'completado', label: 'Historial' },
+]
+
+const MaintenanceDashboard: React.FC = () => {
+  const [activeFilter, setActiveFilter] = useState<FilterTab>('todos')
+  const [selectedEquipo, setSelectedEquipo] = useState<typeof equiposDashboard[0] | null>(null)
+  const [openMt, setOpenMt] = useState<string | null>(null)
+
+  const filtered = mantenimientosData.filter(
+    (m) => activeFilter === 'todos' || m.status === activeFilter
+  )
+
+  // Equipo detail: mantenimientos of that equipo
+  const equipoMts = selectedEquipo
+    ? mantenimientosData.filter((m) => m.equipo === selectedEquipo.id)
+    : []
+
+  const stats = [
+    { label: 'Equipos registrados', value: equiposDashboard.length, icon: <Monitor size={16} className="text-yellow-electric" /> },
+    { label: 'Pendientes', value: mantenimientosData.filter(m => m.status === 'pendiente').length, icon: <AlertCircle size={16} className="text-red-400" /> },
+    { label: 'Próximos', value: mantenimientosData.filter(m => m.status === 'proximo').length, icon: <CalendarClock size={16} className="text-blue-400" /> },
+    { label: 'Realizados', value: mantenimientosData.filter(m => m.status === 'completado').length, icon: <History size={16} className="text-emerald-400" /> },
+  ]
+
   return (
-    <div>
-      <svg viewBox={`0 0 ${w} ${h}`} className="w-full" aria-hidden="true">
-        {/* Risk zone */}
-        <rect x="120" y="0" width="80" height={h} fill="rgba(255,100,100,0.06)" />
-        <line x1="120" y1="0" x2="120" y2={h} stroke="rgba(255,100,100,0.3)" strokeWidth="1" strokeDasharray="3 3"/>
-        <text x="124" y="10" fill="rgba(255,100,100,0.5)" fontSize="7">Zona riesgo</text>
-        {/* Trend line */}
-        <motion.polyline points={polyline} fill="none" stroke="rgba(255,214,0,0.7)" strokeWidth="1.5" strokeLinejoin="round"
-          initial={{ pathLength: 0 }} whileInView={{ pathLength: 1 }} transition={{ duration: 2 }} viewport={{ once: true }} />
-        {/* Area */}
-        <motion.polygon points={`0,${h} ${polyline} ${w},${h}`} fill="rgba(255,214,0,0.05)"
-          initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} transition={{ duration: 1, delay: 0.5 }} viewport={{ once: true }} />
-        {/* Alert dots in risk zone */}
-        {trendData.slice(6).map((v, i) => {
-          const x = ((i + 6) / (trendData.length - 1)) * w
-          const y = h - (v / max) * (h - 10) - 5
-          return (
-            <motion.circle key={i} cx={x} cy={y} r="3" fill="rgba(255,100,100,0.6)"
-              animate={{ r: [3, 5, 3] }} transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.2 }} />
-          )
-        })}
-        <text x="4" y={h - 2} fill="#A3A3A3" fontSize="6">Histórico</text>
-        <text x="122" y={h - 2} fill="rgba(255,100,100,0.5)" fontSize="6">Proyección</text>
-      </svg>
-      <div className="mt-2 px-2 py-1.5 bg-red-400/5 border border-red-400/20 rounded-lg">
-        <p className="text-[9px] text-red-400/80 leading-relaxed">
-          ⚠ Funcionalidad proyectada. Requiere datos suficientes y validación. No implementada actualmente.
-        </p>
+    <motion.div
+      initial={{ opacity: 0, y: 30 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.15 }}
+      transition={{ duration: 0.7 }}
+      className="relative rounded-2xl border border-yellow-electric/30 bg-gradient-to-br from-black-carbon via-black-surface/40 to-black-carbon overflow-hidden"
+    >
+      {/* Ambient glow */}
+      <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
+        <div className="absolute top-0 left-1/4 w-80 h-40 bg-yellow-electric/4 rounded-full blur-3xl" />
+        <div className="absolute bottom-0 right-1/4 w-60 h-32 bg-yellow-electric/3 rounded-full blur-3xl" />
       </div>
-    </div>
+
+      <div className="relative z-10 p-6 lg:p-8">
+        {/* Header */}
+        <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-8 h-8 rounded-lg bg-yellow-electric/10 border border-yellow-electric/30 flex items-center justify-center">
+                <Wrench size={16} className="text-yellow-electric" />
+              </div>
+              <span className="text-[10px] font-mono tracking-widest text-yellow-electric/70 uppercase">Seguimiento de mantenimiento</span>
+            </div>
+            <h3 className="text-white-warm font-black text-xl sm:text-2xl">
+              Cada equipo,{' '}
+              <span className="text-yellow-electric">en el estado correcto.</span>
+            </h3>
+            <p className="text-gray-neutral text-sm mt-1 max-w-lg">
+              Consulta el estado de los equipos y lleva un seguimiento organizado de los mantenimientos programados, realizados y pendientes.
+            </p>
+          </div>
+          <span className="px-3 py-1 bg-yellow-electric/10 border border-yellow-electric/30 rounded-full text-[10px] text-yellow-electric font-mono font-medium tracking-widest shrink-0">
+            DATOS ILUSTRATIVOS
+          </span>
+        </div>
+
+        {/* KPI strip */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+          {stats.map((s, i) => (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, y: 10 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: i * 0.08 }}
+              className="bg-black-deep/60 border border-white/8 rounded-xl p-3 flex items-center gap-3"
+            >
+              <div className="w-8 h-8 rounded-lg bg-white/5 border border-white/8 flex items-center justify-center shrink-0">
+                {s.icon}
+              </div>
+              <div>
+                <div className="text-white-warm font-black text-xl leading-none">{s.value}</div>
+                <div className="text-gray-neutral text-[10px] mt-0.5">{s.label}</div>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+
+        {/* Main layout: equipo list + maintenance table */}
+        <div className="grid lg:grid-cols-[220px_1fr] gap-5">
+
+          {/* Equipment sidebar */}
+          <div className="space-y-2">
+            <p className="text-[10px] font-mono text-gray-neutral/60 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+              <Cpu size={11} /> Equipos
+            </p>
+            {equiposDashboard.map((eq) => {
+              const cfg = equipoStatusCfg[eq.status]
+              const isSelected = selectedEquipo?.id === eq.id
+              return (
+                <motion.button
+                  key={eq.id}
+                  onClick={() => setSelectedEquipo(isSelected ? null : eq)}
+                  whileHover={{ x: 2 }}
+                  transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                  className={`w-full text-left px-3 py-2.5 rounded-xl border transition-all duration-200 ${
+                    isSelected
+                      ? 'bg-yellow-electric/10 border-yellow-electric/40'
+                      : 'bg-black-deep/50 border-white/8 hover:border-yellow-electric/20'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className="text-[11px] font-mono text-gray-neutral">{eq.id}</span>
+                    <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot} ${eq.status === 'alerta' ? 'animate-pulse' : ''}`} />
+                  </div>
+                  <div className="text-xs text-white-warm font-medium truncate">{eq.nombre}</div>
+                  <div className="flex items-center gap-1 mt-1">
+                    <MapPin size={9} className="text-gray-neutral/50" />
+                    <span className="text-[9px] text-gray-neutral/60">{eq.ubicacion}</span>
+                    <span className={`ml-auto text-[9px] px-1.5 py-0.5 rounded border ${cfg.bg} ${cfg.text}`}>{cfg.label}</span>
+                  </div>
+                </motion.button>
+              )
+            })}
+          </div>
+
+          {/* Right panel */}
+          <div className="min-w-0">
+            <AnimatePresence mode="wait">
+              {selectedEquipo ? (
+                /* ── Equipo detail panel ────────────────────────────── */
+                <motion.div
+                  key="detail"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -10 }}
+                  transition={{ duration: 0.25 }}
+                  className="bg-black-deep/60 border border-yellow-electric/25 rounded-xl p-4 h-full"
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <span className="text-[10px] font-mono text-yellow-electric/60 uppercase">Detalle de equipo</span>
+                      <h4 className="text-white-warm font-bold text-base mt-0.5">{selectedEquipo.nombre}</h4>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Tag size={10} className="text-gray-neutral" />
+                        <span className="text-[10px] text-gray-neutral">{selectedEquipo.tipo}</span>
+                        <span className="text-gray-neutral/30">·</span>
+                        <MapPin size={10} className="text-gray-neutral" />
+                        <span className="text-[10px] text-gray-neutral">{selectedEquipo.ubicacion}</span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setSelectedEquipo(null)}
+                      className="w-7 h-7 rounded-lg border border-white/10 flex items-center justify-center text-gray-neutral hover:text-white-warm hover:border-yellow-electric/30 transition-all"
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
+
+                  <p className="text-[10px] font-mono text-gray-neutral/50 uppercase tracking-widest mb-2">
+                    Mantenimientos asociados ({equipoMts.length})
+                  </p>
+                  {equipoMts.length === 0 ? (
+                    <p className="text-gray-neutral text-xs py-6 text-center">Sin mantenimientos registrados.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {equipoMts.map((mt) => {
+                        const cfg = mtStatusCfg[mt.status]
+                        return (
+                          <div key={mt.id} className="px-3 py-2.5 bg-black-carbon/60 rounded-lg border border-white/8 flex items-center gap-3">
+                            {cfg.icon}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-white-warm font-medium">{mt.tipo}</span>
+                                <span className={`text-[9px] px-1.5 py-0.5 rounded border ${cfg.badge}`}>{cfg.label}</span>
+                              </div>
+                              <div className="text-[10px] text-gray-neutral mt-0.5 truncate">{mt.nota}</div>
+                            </div>
+                            <span className="text-[9px] text-gray-neutral/60 shrink-0">{mt.fecha}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </motion.div>
+              ) : (
+                /* ── Maintenance list ────────────────────────────────── */
+                <motion.div
+                  key="list"
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 10 }}
+                  transition={{ duration: 0.25 }}
+                >
+                  {/* Filter tabs */}
+                  <div className="flex gap-1.5 mb-3 flex-wrap">
+                    {filterTabs.map((tab) => (
+                      <button
+                        key={tab.key}
+                        onClick={() => setActiveFilter(tab.key)}
+                        className={`px-3 py-1 rounded-lg text-[11px] font-medium transition-all duration-200 border ${
+                          activeFilter === tab.key
+                            ? 'bg-yellow-electric text-black-deep border-yellow-electric font-bold'
+                            : 'text-gray-neutral border-white/10 hover:border-yellow-electric/30 hover:text-white-warm'
+                        }`}
+                      >
+                        {tab.label}
+                        <span className="ml-1.5 opacity-60">
+                          {tab.key === 'todos'
+                            ? mantenimientosData.length
+                            : mantenimientosData.filter(m => m.status === tab.key).length}
+                        </span>
+                      </button>
+                    ))}
+                    <span className="ml-auto text-[9px] text-gray-neutral/40 self-center">Selecciona un equipo para ver su detalle →</span>
+                  </div>
+
+                  {/* Maintenance rows */}
+                  <div className="space-y-2">
+                    <AnimatePresence mode="popLayout">
+                      {filtered.map((mt) => {
+                        const cfg = mtStatusCfg[mt.status]
+                        const isOpen = openMt === mt.id
+                        return (
+                          <motion.div
+                            key={mt.id}
+                            layout
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.97 }}
+                            transition={{ duration: 0.2 }}
+                            className={`rounded-xl border transition-all duration-200 overflow-hidden ${
+                              isOpen
+                                ? 'bg-black-deep/80 border-yellow-electric/30'
+                                : 'bg-black-deep/50 border-white/8 hover:border-yellow-electric/15'
+                            }`}
+                          >
+                            <button
+                              onClick={() => setOpenMt(isOpen ? null : mt.id)}
+                              className="w-full text-left px-4 py-3 flex items-center gap-3"
+                            >
+                              {cfg.icon}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="text-xs text-white-warm font-semibold">{mt.equipo}</span>
+                                  <span className="text-[10px] text-gray-neutral">— {mt.tipo}</span>
+                                  <span className={`text-[9px] px-1.5 py-0.5 rounded border ${cfg.badge}`}>{cfg.label}</span>
+                                </div>
+                                <div className="text-[10px] text-gray-neutral/70 mt-0.5">{mt.fecha} · {mt.tecnico}</div>
+                              </div>
+                              <ChevronDown
+                                size={13}
+                                className={`text-gray-neutral transition-transform duration-200 shrink-0 ${isOpen ? 'rotate-180 text-yellow-electric' : ''}`}
+                              />
+                            </button>
+
+                            <AnimatePresence>
+                              {isOpen && (
+                                <motion.div
+                                  initial={{ height: 0, opacity: 0 }}
+                                  animate={{ height: 'auto', opacity: 1 }}
+                                  exit={{ height: 0, opacity: 0 }}
+                                  transition={{ duration: 0.22 }}
+                                  className="overflow-hidden"
+                                >
+                                  <div className="px-4 pb-3 pt-1 border-t border-white/8">
+                                    <div className="flex items-start gap-2">
+                                      <span className="text-[9px] font-mono text-gray-neutral/50 uppercase mt-0.5">Nota:</span>
+                                      <p className="text-xs text-gray-neutral leading-relaxed">{mt.nota}</p>
+                                    </div>
+                                    <div className="mt-2 flex gap-4 text-[9px] text-gray-neutral/50">
+                                      <span>ID: <span className="text-gray-neutral font-mono">{mt.id}</span></span>
+                                      <span>Técnico: <span className="text-gray-neutral">{mt.tecnico}</span></span>
+                                    </div>
+                                  </div>
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </motion.div>
+                        )
+                      })}
+                    </AnimatePresence>
+
+                    {filtered.length === 0 && (
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="text-center py-10 text-gray-neutral text-sm"
+                      >
+                        No hay mantenimientos en este filtro.
+                      </motion.div>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
+      </div>
+    </motion.div>
   )
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
 const features: Feature[] = [
   {
     icon: <Monitor size={20} />, title: 'Gestión de equipos', color: 'text-blue-400',
@@ -362,51 +668,8 @@ const FeaturesSection: React.FC = () => {
           ))}
         </div>
 
-        {/* Predictive block - special */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, amount: 0.2 }}
-          transition={{ duration: 0.7 }}
-          className="relative rounded-2xl border border-yellow-electric/30 bg-gradient-to-br from-black-carbon via-black-surface/50 to-black-carbon p-8 overflow-hidden"
-        >
-          <div className="absolute top-4 right-4">
-            <span className="px-3 py-1 bg-yellow-electric/10 border border-yellow-electric/30 rounded-full text-xs text-yellow-electric font-mono font-medium tracking-widest">
-              CAPACIDAD PROYECTADA
-            </span>
-          </div>
-          <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-yellow-electric/3 rounded-full blur-3xl" />
-          </div>
-
-          <div className="grid lg:grid-cols-2 gap-8 items-center relative z-10">
-            <div>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-lg bg-yellow-electric/10 border border-yellow-electric/30 flex items-center justify-center">
-                  <TrendingUp size={20} className="text-yellow-electric" />
-                </div>
-                <div className="w-6 h-px bg-yellow-electric/40" />
-                <AlertTriangle size={16} className="text-yellow-electric/60" />
-              </div>
-              <h3 className="text-white-warm font-black text-2xl mb-3">
-                Una capacidad{' '}
-                <span className="text-yellow-electric">proyectada para el futuro.</span>
-              </h3>
-              <p className="text-gray-neutral leading-relaxed mb-4">
-                Preventix contempla analizar datos históricos para identificar equipos con mayor probabilidad de presentar fallas, facilitando la priorización de mantenimientos.
-              </p>
-              <div className="p-3 bg-black-deep/60 border border-white/10 rounded-lg">
-                <p className="text-gray-neutral text-sm leading-relaxed">
-                  <span className="text-yellow-electric font-medium">⚠ Nota:</span> Esta funcionalidad requiere un volumen suficiente de datos históricos y validación. No representa un modelo implementado ni resultados garantizados.
-                </p>
-              </div>
-            </div>
-            <div className="bg-black-deep/60 rounded-xl p-4 border border-white/10">
-              <p className="text-gray-neutral text-xs font-mono mb-3">TENDENCIA ILUSTRATIVA DE RIESGO</p>
-              <PredictiveMini />
-            </div>
-          </div>
-        </motion.div>
+        {/* ── Maintenance Tracking Dashboard ─────────────────────────────── */}
+        <MaintenanceDashboard />
       </div>
     </section>
   )
