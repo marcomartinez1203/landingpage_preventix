@@ -1,0 +1,198 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    overflow-x: hidden;
+  }
+
+  body {
+    background-color: #0A0A0A;
+    color: #F5F5F0;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    overflow-x: hidden;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::selection {
+    background-color: rgba(255, 214, 0, 0.3);
+    color: #FFD600;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #0A0A0A;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #FFD600;
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #FFEA00;
+  }
+
+  /* Focus styles */
+  :focus-visible {
+    outline: 2px solid #FFD600;
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* Reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, ::before, ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-yellow-electric text-black-deep font-semibold px-6 py-3 rounded-lg
+           transition-all duration-300 hover:bg-yellow-bright hover:shadow-yellow-glow
+           focus-visible:ring-2 focus-visible:ring-yellow-electric active:scale-95
+           inline-flex items-center gap-2;
+  }
+
+  .btn-secondary {
+    @apply border border-yellow-electric/40 text-white-warm font-medium px-6 py-3 rounded-lg
+           transition-all duration-300 hover:border-yellow-electric hover:text-yellow-electric
+           hover:bg-yellow-electric/5 focus-visible:ring-2 focus-visible:ring-yellow-electric
+           active:scale-95 inline-flex items-center gap-2;
+  }
+
+  .section-label {
+    @apply text-yellow-electric text-xs font-mono font-medium tracking-[0.25em] uppercase
+           inline-flex items-center gap-2;
+  }
+
+  .section-title {
+    @apply text-white-warm font-bold leading-tight;
+  }
+
+  .card-dark {
+    @apply bg-black-carbon border border-white/5 rounded-xl p-6
+           hover:border-yellow-electric/20 transition-all duration-300;
+  }
+
+  .glass-panel {
+    @apply backdrop-blur-md bg-white/5 border border-white/10 rounded-xl;
+  }
+
+  .text-highlight {
+    @apply text-yellow-electric;
+  }
+
+  .grid-bg {
+    background-image:
+      linear-gradient(rgba(255, 214, 0, 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 214, 0, 0.04) 1px, transparent 1px);
+    background-size: 60px 60px;
+  }
+
+  .ambient-orb {
+    @apply absolute rounded-full blur-3xl pointer-events-none;
+  }
+}
+
+@layer utilities {
+  .text-gradient-yellow {
+    @apply bg-gradient-to-r from-yellow-electric to-yellow-bright bg-clip-text text-transparent;
+  }
+
+  .border-yellow-subtle {
+    border-color: rgba(255, 214, 0, 0.2);
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* Animated line drawing for SVG */
+.svg-line-draw {
+  stroke-dasharray: 1000;
+  stroke-dashoffset: 1000;
+  animation: drawLine 2s ease-in-out forwards;
+}
+
+@keyframes drawLine {
+  to { stroke-dashoffset: 0; }
+}
+
+/* Orb glow pulse */
+.orb-pulse {
+  animation: orbPulse 6s ease-in-out infinite;
+}
+
+@keyframes orbPulse {
+  0%, 100% { opacity: 0.15; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(1.15); }
+}
+
+/* Floating animation */
+.float-animation {
+  animation: floatAnim 6s ease-in-out infinite;
+}
+
+@keyframes floatAnim {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-12px); }
+}
+
+/* Shimmer effect */
+.shimmer {
+  background: linear-gradient(90deg, transparent, rgba(255, 214, 0, 0.1), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Progress bar animation */
+.progress-fill {
+  animation: progressFill 1.5s ease-out forwards;
+}
+
+@keyframes progressFill {
+  from { width: 0%; }
+}
+
+/* Typing cursor */
+.cursor-blink::after {
+  content: '|';
+  animation: blink 1s step-end infinite;
+  color: #FFD600;
+  margin-left: 2px;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
